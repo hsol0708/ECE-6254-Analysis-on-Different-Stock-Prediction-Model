@@ -4,6 +4,8 @@ Final Project
 
 Temporary Assignment :
 
-Han     : HMM, LSTM , GBM
-Da      : Deep Neural Network, Monte Carlo, Reinforcement Learning
-Jackson : Linear Regression, SVM , Random Forest
+Han     : HMM, LSTM , GBM 
+
+Da      : Deep Neural Network, Monte Carlo, Reinforcement Learning 
+
+Jackson : Linear Regression, SVM , Random Forest 
