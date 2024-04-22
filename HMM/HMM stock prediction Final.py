@@ -257,3 +257,4 @@ mean_accuracy, variance_accuracy = main_simulation(ticker, start_date, end_date,
 
 print("Mean Accuracy over", num_trials, "trials:", mean_accuracy)
 print("Variance of Accuracies over", num_trials, "trials:", variance_accuracy)
+

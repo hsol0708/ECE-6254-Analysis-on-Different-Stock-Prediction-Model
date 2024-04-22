@@ -1,10 +1,12 @@
+import pandas as pd
+import numpy as np
 import lightgbm as lgbm
 import yfinance as yf
-import pandas as pd
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 import pickle
-import numpy as np
+import math
 
 # Function to fetch and prepare data
 def fetch_and_prepare_data(ticker, start_date, end_date):
@@ -14,60 +16,69 @@ def fetch_and_prepare_data(ticker, start_date, end_date):
     stock_data.columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
     stock_data['daily_return'] = stock_data['Close'].pct_change()
     stock_data['daily_volatility'] = stock_data['Close'].pct_change().rolling(window=5).std()
+    stock_data['lagged_close'] = stock_data['Close'].shift(1)  # New feature: previous day's close
     stock_data.fillna(stock_data.mean(), inplace=True)  # Handle NaNs
     return stock_data
 
 # Fetch and prepare the data
-prepared_data = fetch_and_prepare_data('NVDA', '2020-01-01', '2020-12-31')
+prepared_data = fetch_and_prepare_data('AAPL', '2021-01-01', '2023-12-31')
 
-# Prepare the features and labels
-features = ['Open', 'High', 'Low', 'Close', 'Volume', 'daily_return', 'daily_volatility']
+# Convert 'Date' to datetime for better plotting
+prepared_data['Date'] = pd.to_datetime(prepared_data['Date'])
+
+# Prepare the features and labels for regression
+features = ['Open', 'High', 'Low', 'Volume', 'daily_return', 'daily_volatility', 'lagged_close']
 X = prepared_data[features]
-y = (prepared_data['daily_return'] > 0).astype(int)
+y = prepared_data['Close']  # Predicting closing price
 
 # Split the dataset
-xtr, xval, ytr, yval = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_val, y_train, y_val, dates_train, dates_val = train_test_split(X, y, prepared_data['Date'], test_size=0.2, random_state=42)
 
-# LightGBM parameters
+# LightGBM parameters for regression
 params = {
     "num_leaves": 31,
-    "objective": "binary",
+    "objective": "regression",
     "learning_rate": 0.05,
     "boosting_type": "gbdt",
-    "metric": "auc"
+    "metric": "rmse",
+    "verbose": 1
 }
 
 # Create datasets for LightGBM
-d_train = lgbm.Dataset(xtr, label=ytr)
-d_eval = lgbm.Dataset(xval, label=yval, reference=d_train)
+d_train = lgbm.Dataset(X_train, label=y_train)
+d_eval = lgbm.Dataset(X_val, label=y_val, reference=d_train)
 
-# Train the model
+# Train the regression model
 try:
-    clf = lgbm.train(
+    reg_model = lgbm.train(
         params,
         d_train,
         num_boost_round=1000,
-        valid_sets=[d_eval],  # Specify at least one validation set
-        early_stopping_rounds=50,  # Use early stopping
-        verbose_eval=50
+        valid_sets=[d_eval],
+        callbacks=[lgbm.callback.early_stopping(stopping_rounds=50)]
     )
-    print("Model trained successfully!")
-
-    # Save the model
-    model_name = 'lgb_model.bin'
-    pickle.dump(clf, open(model_name, 'wb'))
-
-    # Plot feature importance
-    fig, ax = plt.subplots(figsize=(10, 8))
-    lgbm.plot_importance(clf, ax=ax, max_num_features=10)
-    plt.show()
+    print("Regression model trained successfully!")
 except Exception as e:
     print("Error during model training:", e)
 
+# Predicting on the validation set
+val_predictions = reg_model.predict(X_val)
+rmse = math.sqrt(mean_squared_error(y_val, val_predictions))
+print("RMSE on validation set:", rmse)
 
-#preds = clf.predict(xtr)
-#pred_labels = np.rint(preds)
+# Combine the validation dates and predictions into a DataFrame
+validation_df = pd.DataFrame({
+    'Date': dates_val,
+    'Actual_Close': y_val,
+    'Predicted_Close': val_predictions
+}).sort_values('Date')
 
-
-    
-#accuracy = sklearn.metrics.accuracy_score(ytr, pred_labels)
+# Plot the predictions against the actual values
+plt.figure(figsize=(14, 7))
+plt.plot(validation_df['Date'], validation_df['Actual_Close'], label='Actual Close Price', color='blue', alpha=0.5)
+plt.plot(validation_df['Date'], validation_df['Predicted_Close'], label='Predicted Close Price', color='red', linestyle='--', alpha=0.5)
+plt.title('Actual vs Predicted Close Prices')
+plt.xlabel('Date')
+plt.ylabel('Close Price')
+plt.legend()
+plt.show()
