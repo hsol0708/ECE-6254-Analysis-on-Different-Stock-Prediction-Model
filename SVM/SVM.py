@@ -14,33 +14,62 @@ data['Date'] = data.index
 
 # Prepare data for SVM
 data['Days'] = (data['Date'] - data['Date'].min()).dt.days
-X = data[['Days']]  # Features
-y = data['Close']   # Target
+X = data[['Days']].values
+y = data['Close'].values
 
 # Split the data into training and testing sets (80% / 20%)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=43)
 
-# Create and fit the SVR model
-model = SVR(kernel='rbf')
+# Initialize SVM with RBF kernel
+model = SVR(kernel='rbf', C=100, gamma=0.1)
+
+# Fit the model
 model.fit(X_train, y_train)
 
 # Predictions
 y_pred = model.predict(X_test)
 
-# Calculate RMSE, MSE, and accuracy
-rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+# Calculate RMSE, MSE, and accuracy (R^2 score)
 mse = mean_squared_error(y_test, y_pred)
-accuracy = model.score(X_test, y_test)  # R^2 score as accuracy
+rmse = np.sqrt(mse)
+ss_total = np.sum((y_test - np.mean(y_train)) ** 2)  # Use training mean for fairness in comparison
+ss_res = np.sum((y_test - y_pred) ** 2)
+accuracy = 1 - ss_res / ss_total
 
 # Repeat trials for mean accuracy and variance
 accuracies = []
-for _ in range(100):
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-    model.fit(X_train, y_train)
-    accuracies.append(model.score(X_test, y_test))
+rmses = []
+mses = []
 
+for i in range(100):
+    # Split the data into training and testing sets (80% / 20%)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=i)
+
+    # Initialize SVM with RBF kernel
+    model = SVR(kernel='rbf', C=100, gamma=0.1)
+
+    # Fit the model
+    model.fit(X_train, y_train)
+
+    # Make predictions
+    y_pred = model.predict(X_test)
+
+    # Calculate metrics
+    mse = mean_squared_error(y_test, y_pred)
+    rmse = np.sqrt(mse)
+    ss_total = np.sum((y_test - np.mean(y_train)) ** 2)
+    ss_res = np.sum((y_test - y_pred) ** 2)
+    accuracy = 1 - ss_res / ss_total
+
+    accuracies.append(accuracy)
+    rmses.append(rmse)
+    mses.append(mse)
+
+# Calculate mean and variance of accuracy
 mean_accuracy = np.mean(accuracies)
 variance_accuracy = np.var(accuracies)
+mean_rmse = np.mean(rmses)
+mean_mse = np.mean(mses)
 
 plt.figure(figsize=(14, 7))
 plt.plot(data['Date'], data['Close'], label='Close Price')
@@ -83,18 +112,17 @@ plt.show()
 plt.figure(figsize=(14, 7))
 plt.scatter(X_test, y_test, color='blue', label='Actual')
 plt.scatter(X_test, y_pred, color='red', label='Predicted', alpha=0.5)
-plt.title('Actual vs. Predicted Prices')
+plt.title('Actual vs. Predicted Prices (SVM)')
 plt.xlabel('Days from Start')
 plt.ylabel('Price')
 plt.legend()
 plt.show()
 
 # Output results
-print(f'Accuracy of prediction on test data (R^2 score): {accuracy:.2f}')
-print(f'RMSE of the model: {rmse:.2f}')
-print(f'MSE of the model: {mse:.2f}')
-print(f'Mean Accuracy over 100 trials: {mean_accuracy:.2f}')
-print(f'Variance of Accuracies over 100 trials: {variance_accuracy:.2f}')
-
-
-
+print(f'Accuracy of prediction on test data (R^2 score): {accuracy:.6f}')
+print(f'RMSE of the model: {rmse:.6f}')
+print(f'MSE of the model: {mse:.6f}')
+print(f'Mean RMSE of the model: {mean_rmse:.6f}')
+print(f'Mean MSE of the model: {mean_mse:.6f}')
+print(f'Mean Accuracy over 100 trials: {mean_accuracy:.6f}')
+print(f'Variance of Accuracies over 100 trials: {variance_accuracy:.6f}')
