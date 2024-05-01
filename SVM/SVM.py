@@ -1,85 +1,31 @@
 import numpy as np
-import pandas as pd
 import yfinance as yf
-import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 from sklearn.svm import SVR
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from mplfinance.original_flavor import candlestick_ohlc
 
-# Fetch AAPL stock data from Yahoo Finance
-data = yf.download('AAPL', start='2021-01-01', end='2023-12-31')
-data['Date'] = data.index
+# Fetch AAPL stock data
+ticker_symbol = "AAPL"
+start_date = "2021-01-01"
+end_date = "2023-12-31"
+aapl_data = yf.download(ticker_symbol, start=start_date, end=end_date)
+aapl_data.reset_index(inplace=True)  # Reset index to use 'Date' in calculations
 
-# Prepare data for SVM
-data['Days'] = (data['Date'] - data['Date'].min()).dt.days
-X = data[['Days']].values
-y = data['Close'].values
-
-# Split the data into training and testing sets (80% / 20%)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=43)
-
-# Initialize SVM with RBF kernel
-model = SVR(kernel='rbf', C=100, gamma=0.1)
-
-# Fit the model
-model.fit(X_train, y_train)
-
-# Predictions
-y_pred = model.predict(X_test)
-
-# Calculate RMSE, MSE, and accuracy (R^2 score)
-mse = mean_squared_error(y_test, y_pred)
-rmse = np.sqrt(mse)
-ss_total = np.sum((y_test - np.mean(y_train)) ** 2)  # Use training mean for fairness in comparison
-ss_res = np.sum((y_test - y_pred) ** 2)
-accuracy = 1 - ss_res / ss_total
-
-# Repeat trials for mean accuracy and variance
-accuracies = []
-rmses = []
-mses = []
-
-for i in range(100):
-    # Split the data into training and testing sets (80% / 20%)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=i)
-
-    # Initialize SVM with RBF kernel
-    model = SVR(kernel='rbf', C=100, gamma=0.1)
-
-    # Fit the model
-    model.fit(X_train, y_train)
-
-    # Make predictions
-    y_pred = model.predict(X_test)
-
-    # Calculate metrics
-    mse = mean_squared_error(y_test, y_pred)
-    rmse = np.sqrt(mse)
-    ss_total = np.sum((y_test - np.mean(y_train)) ** 2)
-    ss_res = np.sum((y_test - y_pred) ** 2)
-    accuracy = 1 - ss_res / ss_total
-
-    accuracies.append(accuracy)
-    rmses.append(rmse)
-    mses.append(mse)
-
-# Calculate mean and variance of accuracy
-mean_accuracy = np.mean(accuracies)
-variance_accuracy = np.var(accuracies)
-mean_rmse = np.mean(rmses)
-mean_mse = np.mean(mses)
-
+# 1. Plot the closing prices over time
 plt.figure(figsize=(14, 7))
-plt.plot(data['Date'], data['Close'], label='Close Price')
-plt.title('Closing Prices Over Time')
+plt.plot(aapl_data['Date'], aapl_data['Close'], label='Close Price')
+plt.title('Closing Price of AAPL')
 plt.xlabel('Date')
-plt.ylabel('Price')
+plt.ylabel('Close Price (USD)')
+plt.legend()
 plt.show()
 
+# 2. Candlestick chart
 plt.figure(figsize=(14, 7))
-ohlc = data.loc[:, ['Date', 'Open', 'High', 'Low', 'Close']]
+ohlc = aapl_data.loc[:, ['Date', 'Open', 'High', 'Low', 'Close']]
 ohlc['Date'] = mdates.date2num(ohlc['Date'])
 ax = plt.gca()
 candlestick_ohlc(ax, ohlc.values, width=0.6, colorup='g', colordown='r')
@@ -89,40 +35,73 @@ plt.xlabel('Date')
 plt.ylabel('Price')
 plt.show()
 
+# 3. Closing price and 30-days moving average
+aapl_data['30_MA'] = aapl_data['Close'].rolling(window=30).mean()
 plt.figure(figsize=(14, 7))
-data['30_MA'] = data['Close'].rolling(window=30).mean()
-plt.plot(data['Date'], data['Close'], label='Close Price')
-plt.plot(data['Date'], data['30_MA'], label='30-Day MA', linestyle='--')
-plt.title('Close and 30-Day MA')
+plt.plot(aapl_data.index, aapl_data['Close'], label='Close Price')
+plt.plot(aapl_data.index, aapl_data['30_MA'], label='30-Day MA', color='r')
+plt.title('Close Price and 30-Day Moving Average of AAPL')
 plt.xlabel('Date')
-plt.ylabel('Price')
+plt.ylabel('Price (USD)')
 plt.legend()
 plt.show()
 
+# 4. Monthly seasonality
 plt.figure(figsize=(14, 7))
-data['Month'] = data['Date'].dt.month
-monthly_avg = data.groupby('Month')['Close'].mean()
+aapl_data['Month'] = aapl_data['Date'].dt.month
+monthly_avg = aapl_data.groupby('Month')['Close'].mean()
 plt.plot(monthly_avg.index, monthly_avg.values, marker='o')
 plt.title('Monthly Seasonality')
 plt.xlabel('Month')
 plt.ylabel('Avg. Close Price')
-plt.xticks(range(1, 13))
+plt.xticks(range(1, 13))  # Ensure all months are labeled
 plt.show()
 
+# Prepare data for SVM regression
+data = aapl_data[['Close']].copy()
+data['Target'] = data['Close'].shift(-1)
+data = data[:-1]  # Remove the last NaN
+X = data[['Close']]
+y = data['Target']
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=None)
+model = SVR(kernel='linear')  # Using a linear kernel; change as needed
+model.fit(X_train, y_train)
+predictions = model.predict(X_test)
+mse = mean_squared_error(y_test, predictions)
+
+# Multiple trials for accuracy and variance calculations
+accuracies = []
+mses = []
+rmses = []
+
+for _ in range(100):
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=None)
+    model = SVR(kernel='rbf', C=100, gamma=0.1)
+    model.fit(X_train, y_train)
+    predictions = model.predict(X_test)
+    accuracies.append(model.score(X_test, y_test))
+    mse = mean_squared_error(y_test, predictions)
+    mses.append(mse)
+    rmses.append(np.sqrt(mse))
+
+# 5. Plot actual vs predicted
 plt.figure(figsize=(14, 7))
-plt.scatter(X_test, y_test, color='blue', label='Actual')
-plt.scatter(X_test, y_pred, color='red', label='Predicted', alpha=0.5)
-plt.title('Actual vs. Predicted Prices (SVM)')
-plt.xlabel('Days from Start')
-plt.ylabel('Price')
+plt.scatter(y_test.index, y_test, label='Actual')
+plt.scatter(y_test.index, predictions, label='Predicted', color='r')
+plt.title('Actual vs Predicted Stock Prices')
+plt.xlabel('Date')
+plt.ylabel('Price (USD)')
 plt.legend()
 plt.show()
 
-# Output results
-print(f'Accuracy of prediction on test data (R^2 score): {accuracy:.6f}')
-print(f'RMSE of the model: {rmse:.6f}')
-print(f'MSE of the model: {mse:.6f}')
-print(f'Mean RMSE of the model: {mean_rmse:.6f}')
-print(f'Mean MSE of the model: {mean_mse:.6f}')
-print(f'Mean Accuracy over 100 trials: {mean_accuracy:.6f}')
-print(f'Variance of Accuracies over 100 trials: {variance_accuracy:.6f}')
+# Calculate and display statistics
+mean_accuracy = np.mean(accuracies)
+variance = np.var(accuracies)
+mean_mse = np.mean(mses)
+mean_rmse = np.mean(rmses)
+
+print(f"Mean Accuracy: {mean_accuracy:.6f}")
+print(f"Variance of Accuracies: {variance:.6f}")
+print(f"Mean MSE: {mean_mse:.6f}")
+print(f"Mean RMSE: {mean_rmse:.6f}")
