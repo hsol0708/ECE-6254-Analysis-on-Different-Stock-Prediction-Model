@@ -12,7 +12,7 @@ ticker_symbol = "AAPL"
 start_date = "2021-01-01"
 end_date = "2023-12-31"
 aapl_data = yf.download(ticker_symbol, start=start_date, end=end_date)
-aapl_data.reset_index(inplace=True)  # Reset index to use 'Date' in calculations
+aapl_data.reset_index(inplace=True)
 
 # 1. Plot the closing prices over time
 plt.figure(figsize=(14, 7))
@@ -54,7 +54,7 @@ plt.plot(monthly_avg.index, monthly_avg.values, marker='o')
 plt.title('Monthly Seasonality')
 plt.xlabel('Month')
 plt.ylabel('Avg. Close Price')
-plt.xticks(range(1, 13))  # Ensure all months are labeled
+plt.xticks(range(1, 13))
 plt.show()
 
 # Prepare data for Random Forest regression
